@@ -1,10 +1,12 @@
 package com.binbin.dwd
 
 import com.alibaba.fastjson.{JSON, JSONObject}
-import com.binbin.bean.{OrderInfo, ProvinceInfo}
-import com.binbin.util.{MyKafkaUtil, OffsetManager, PhoenixUtil}
+import com.binbin.bean.{OrderInfo, ProvinceInfo, UserState}
+import com.binbin.util.{MyConstant, MyKafkaUtil, OffsetManager, PhoenixUtil}
+import org.apache.hadoop.conf.Configuration
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
+import org.apache.phoenix.spark._
 import org.apache.spark.SparkConf
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -60,7 +62,8 @@ object OrderInfoApp {
 
         if (userIdList.nonEmpty) {
           val sql =
-            s"select * from user_state2020 where user_id in ('${userIdList.mkString("','")}')"
+            s"select * from ${MyConstant.HBASE_TABLE_PRE}_user_state where user_id in ('${userIdList
+              .mkString("','")}')"
           val orderInfoObjList: List[JSONObject] = PhoenixUtil.queryList(sql)
           val ifConsumedMap: Map[String, String] = orderInfoObjList.map {
             orderInfo =>
@@ -110,8 +113,29 @@ object OrderInfoApp {
           }
       }
 
+    // 保存首单状态到hbase
+    orderInfoWithFirstRealFlagDStream.cache()
+    orderInfoWithFirstRealFlagDStream.foreachRDD { rdd =>
+      val userStateRdd: RDD[UserState] = rdd
+        .filter {
+          _.if_first_order == "1"
+        }
+        .map { orderInfo =>
+          val userState = UserState(orderInfo.user_id.toString, "1")
+          userState
+        }
+      userStateRdd.saveToPhoenix(
+        s"${MyConstant.HBASE_TABLE_PRE}_user_state",
+        Seq("USER_ID", "IF_CONSUMED"),
+        new Configuration,
+        Some(MyConstant.ZK_URL)
+      )
+    }
+
     // 优化 ： 因为传输量小  使用数据的占比大  可以考虑使用广播变量     查询hbase的次数会变小   分区越多效果越明显
     //利用driver进行查询 再利用广播变量进行分发
+    // 维度数据合并
+//    地址信息
     val orderInfoWithProvinceDS: DStream[OrderInfo] =
       orderInfoWithFirstRealFlagDStream.transform { rdd =>
         val sql =
@@ -144,7 +168,13 @@ object OrderInfoApp {
           orderInfo
         }
         orderInfoWithProvinceRDD
+
       }
+    
+//    var user_age_group: String,
+//    var user_gender: String)
+
+    // 保存数据到es和kafka
 
     ssc.start()
     ssc.awaitTermination()

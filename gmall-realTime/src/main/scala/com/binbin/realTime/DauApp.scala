@@ -40,7 +40,7 @@ object DauApp {
     val kafkaOffsetMap: Map[TopicPartition, Long] =
       OffsetManager.getOffset(topicName, groupId)
 
-    if (kafkaOffsetMap.isEmpty == null) {
+    if (kafkaOffsetMap.isEmpty) {
       recordInputStream = MyKafkaUtil.getKafkaStream(topicName, ssc)
     } else {
       recordInputStream = MyKafkaUtil.getKafkaStream(topicName, ssc, groupId)
@@ -115,7 +115,6 @@ object DauApp {
       }
       OffsetManager.saveOffset(topicName, groupId, offsetRanges)
     }
-
 
     ssc.start()
     ssc.awaitTermination()

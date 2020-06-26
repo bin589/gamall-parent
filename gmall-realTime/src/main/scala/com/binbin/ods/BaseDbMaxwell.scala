@@ -43,10 +43,12 @@ object BaseDbMaxwell {
     val jsonObjDStream: DStream[JSONObject] = inputGetOffsetDstream.map {
       record =>
         val jsonString = record.value()
-        println(jsonString)
         val jSONObject = JSON.parseObject(jsonString)
         jSONObject
     }
+
+
+
 
     jsonObjDStream.foreachRDD { rdd =>
       // 推回kafka
@@ -57,9 +59,12 @@ object BaseDbMaxwell {
 
           val jsonString = jsonObj.getString("data")
           val tableName: String = jsonObj.getString("table")
-          val topic = "ODS_" + tableName.toUpperCase
-          println(s"topic=>${topic}==>${jsonString}")
-          MyKafkaSink.send(topic, jsonString) //非幂等的操作 可能会导致数据重复
+          if(tableName=="order_detail"){
+            val topic = "ODS_" + tableName.toUpperCase
+            println(s"topic=>${topic}==>${jsonString}")
+            MyKafkaSink.send(topic, jsonString) //非幂等的操作 可能会导致数据重复
+          }
+
         }
       }
 
