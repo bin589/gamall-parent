@@ -56,7 +56,7 @@ object BaseDbMaxwell {
 
           val jsonString = jsonObj.getString("data")
           val tableName: String = jsonObj.getString("table")
-          if (tableName == "order_info") {
+          if (tableName == "order_info" || tableName == "order_detail") {
             val topic = "ODS_" + tableName.toUpperCase
             println(s"topic=>${topic}==>${jsonString}")
             MyKafkaSink.send(topic, jsonString) //非幂等的操作 可能会导致数据重复

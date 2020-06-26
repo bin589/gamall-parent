@@ -226,7 +226,6 @@ object OrderInfoApp {
       }
 
     // 保存数据到es和kafka
-    import org.apache.phoenix.spark._
     orderInfoWithProvinceWithUserDS.foreachRDD { orderRdd =>
       orderRdd.foreachPartition { orderIter =>
         val ordersList: List[OrderInfo] = orderIter.toList
@@ -237,47 +236,50 @@ object OrderInfoApp {
         val dateString: String =
           new SimpleDateFormat(MyDateUtils.patternYMD).format(new Date())
 
-        // 保存到es
-        MyEsUtil.bulkDoc(
-          orderInfoWithIdList,
-          "gmall0105_order_info_" + dateString
-        )
+        //  保存到es
+//         TODO 测试先注释
+//        MyEsUtil.bulkDoc(
+        //          orderInfoWithIdList,
+        //          "gmall0105_order_info_" + dateString
+        //        )
         for (order <- ordersList) {
           val orderStr: String =
             JSON.toJSONString(order, new SerializeConfig(true))
-            // 发送到kafka
+          // 发送到kafka
+          println(s"DWD_ORDER_INFO=>${orderStr}")
           MyKafkaSink.send("DWD_ORDER_INFO", order.id.toString, orderStr)
         }
 
       }
 
       // 保存到hbase
-      orderRdd.saveToPhoenix(
-        s"${MyConstant.HBASE_TABLE_PRE}_order_info",
-        Seq(
-          "ID",
-          "PROVINCE_ID",
-          "ORDER_STATUS",
-          "USER_ID",
-          "FINAL_TOTAL_AMOUNT",
-          "BENEFIT_REDUCE_AMOUNT",
-          "ORIGINAL_TOTAL_AMOUNT",
-          "FEIGHT_FEE",
-          "EXPIRE_TIME",
-          "CREATE_TIME",
-          "OPERATE_TIME",
-          "CREATE_DATE",
-          "CREATE_HOUR",
-          "IF_FIRST_ORDER",
-          "PROVINCE_NAME",
-          "PROVINCE_AREA_CODE",
-          "PROVINCE_ISO_CODE",
-          "USER_AGE_GROUP",
-          "USER_GENDER"
-        ),
-        new Configuration,
-        Some(MyConstant.ZK_URL)
-      )
+//       TODO 测试先注释
+//      orderRdd.saveToPhoenix(
+//        s"${MyConstant.HBASE_TABLE_PRE}_order_info",
+//        Seq(
+//          "ID",
+//          "PROVINCE_ID",
+//          "ORDER_STATUS",
+//          "USER_ID",
+//          "FINAL_TOTAL_AMOUNT",
+//          "BENEFIT_REDUCE_AMOUNT",
+//          "ORIGINAL_TOTAL_AMOUNT",
+//          "FEIGHT_FEE",
+//          "EXPIRE_TIME",
+//          "CREATE_TIME",
+//          "OPERATE_TIME",
+//          "CREATE_DATE",
+//          "CREATE_HOUR",
+//          "IF_FIRST_ORDER",
+//          "PROVINCE_NAME",
+//          "PROVINCE_AREA_CODE",
+//          "PROVINCE_ISO_CODE",
+//          "USER_AGE_GROUP",
+//          "USER_GENDER"
+//        ),
+//        new Configuration,
+//        Some(MyConstant.ZK_URL)
+//      )
       // 保存偏移量
       OffsetManager.saveOffset(topicName, groupId, offsetRanges)
 

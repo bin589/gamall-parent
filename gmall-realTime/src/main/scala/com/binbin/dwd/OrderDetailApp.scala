@@ -1,9 +1,9 @@
 package com.binbin.dwd
 
+import com.alibaba.fastjson.serializer.SerializeConfig
 import com.alibaba.fastjson.{JSON, JSONObject}
 import com.binbin.bean.{OrderDetail, SkuInfo}
-import com.binbin.util.{MyConstant, MySparkUtils, OffsetManager, PhoenixUtil}
-import org.apache.hadoop.conf.Configuration
+import com.binbin.util._
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.SparkConf
 import org.apache.spark.broadcast.Broadcast
@@ -46,7 +46,6 @@ object OrderDetailApp {
     // 合并维表数据
     val orderDetailWithSkuDS: DStream[OrderDetail] = orderDetailDS.transform {
       rdd =>
-//        rdd.cache()
         val skuIdList: Array[Long] = rdd.map(_.sku_id).collect()
         if (skuIdList.isEmpty) {
           rdd
@@ -82,29 +81,44 @@ object OrderDetailApp {
         }
 
     }
-    //  保存到hbase
-    import org.apache.phoenix.spark._
-    orderDetailWithSkuDS.foreachRDD { rdd =>
-      rdd.saveToPhoenix(
-        s"${MyConstant.HBASE_TABLE_PRE}_order_detail",
-        Seq(
-          "ID",
-          "ORDER_ID",
-          "SKU_ID",
-          "ORDER_PRICE",
-          "SKU_NUM",
-          "SKU_NAME",
-          "CREATE_TIME",
-          "SPU_ID",
-          "SPU_NAME",
-          "TM_ID",
-          "TM_NAME",
-          "CATEGORY3_ID",
-          "CATEGORY3_NAME"
-        ),
-        new Configuration,
-        Some(MyConstant.ZK_URL)
-      )
+    orderDetailWithSkuDS.foreachRDD { orderDetailRDD =>
+      // 发送到kafka
+      orderDetailRDD.foreachPartition { orderDetailIter =>
+        val orderDetailList: List[OrderDetail] = orderDetailIter.toList
+        for (orderDetail <- orderDetailList) {
+          val orderDetailsStr: String =
+            JSON.toJSONString(orderDetail, new SerializeConfig(true))
+          println(s"DWD_ORDER_DETAIL=>${orderDetailsStr}")
+          MyKafkaSink.send(
+            "DWD_ORDER_DETAIL",
+            orderDetail.id.toString,
+            orderDetailsStr
+          )
+        }
+      }
+
+      //  保存到hbase
+      //  TODO 测试先注释
+//      orderDetailRDD.saveToPhoenix(
+//        s"${MyConstant.HBASE_TABLE_PRE}_order_detail",
+//        Seq(
+//          "ID",
+//          "ORDER_ID",
+//          "SKU_ID",
+//          "ORDER_PRICE",
+//          "SKU_NUM",
+//          "SKU_NAME",
+//          "CREATE_TIME",
+//          "SPU_ID",
+//          "SPU_NAME",
+//          "TM_ID",
+//          "TM_NAME",
+//          "CATEGORY3_ID",
+//          "CATEGORY3_NAME"
+//        ),
+//        new Configuration,
+//        Some(MyConstant.ZK_URL)
+//      )
       OffsetManager.saveOffset(topicName, groupId, offsetRanges)
     }
 
