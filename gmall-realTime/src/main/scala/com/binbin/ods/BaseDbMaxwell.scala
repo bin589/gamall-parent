@@ -47,9 +47,6 @@ object BaseDbMaxwell {
         jSONObject
     }
 
-
-
-
     jsonObjDStream.foreachRDD { rdd =>
       // 推回kafka
       rdd.foreach { jsonObj =>
@@ -59,7 +56,7 @@ object BaseDbMaxwell {
 
           val jsonString = jsonObj.getString("data")
           val tableName: String = jsonObj.getString("table")
-          if(tableName=="order_detail"){
+          if (tableName == "order_info") {
             val topic = "ODS_" + tableName.toUpperCase
             println(s"topic=>${topic}==>${jsonString}")
             MyKafkaSink.send(topic, jsonString) //非幂等的操作 可能会导致数据重复

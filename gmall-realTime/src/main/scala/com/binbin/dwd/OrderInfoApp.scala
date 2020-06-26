@@ -1,8 +1,12 @@
 package com.binbin.dwd
 
+import java.text.SimpleDateFormat
+import java.util.Date
+
+import com.alibaba.fastjson.serializer.SerializeConfig
 import com.alibaba.fastjson.{JSON, JSONObject}
-import com.binbin.bean.{OrderInfo, ProvinceInfo, UserState}
-import com.binbin.util.{MyConstant, MyKafkaUtil, OffsetManager, PhoenixUtil}
+import com.binbin.bean.{OrderInfo, ProvinceInfo, UserInfo, UserState}
+import com.binbin.util._
 import org.apache.hadoop.conf.Configuration
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
@@ -21,8 +25,8 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 object OrderInfoApp {
   def main(args: Array[String]): Unit = {
     val sparkConf: SparkConf =
-      new SparkConf().setAppName("OrderInfoApp").setMaster("local[*]")
-    val ssc = new StreamingContext(sparkConf, Seconds(5))
+      new SparkConf().setAppName("OrderInfoApp").setMaster("local[4]")
+    val ssc = new StreamingContext(sparkConf, Seconds(3))
 
     val topicName = "ODS_ORDER_INFO"
     val groupId = "order_info_group"
@@ -76,7 +80,7 @@ object OrderInfoApp {
           for (orderInfo <- ordersInfoList) {
             val ifConsumed: String =
               ifConsumedMap.getOrElse(orderInfo.user_id.toString, null)
-            if (ifConsumed.nonEmpty && ifConsumed == "1") {
+            if (ifConsumed != null && ifConsumed == "1") {
               orderInfo.if_first_order = "0";
             } else {
               orderInfo.if_first_order = "1";
@@ -170,11 +174,114 @@ object OrderInfoApp {
         orderInfoWithProvinceRDD
 
       }
-    
+
 //    var user_age_group: String,
 //    var user_gender: String)
+    val orderInfoWithProvinceWithUserDS: DStream[OrderInfo] =
+      orderInfoWithProvinceDS.transform { rdd =>
+        val userIdSet: Set[Long] = rdd.map(_.user_id).collect().toSet
+        if (userIdSet.isEmpty) {
+          rdd
+        } else {
+
+          val sql = s"select id,user_age_group,user_gender " +
+            s"from ${MyConstant.HBASE_TABLE_PRE}_user_info " +
+            s"where id in (${userIdSet.mkString(",")})"
+
+          val userInfoJsonList: List[JSONObject] = PhoenixUtil.queryList(sql)
+          if (userInfoJsonList.isEmpty) {
+            rdd
+          } else {
+
+            val userMap: Map[Long, UserInfo] = userInfoJsonList.map { useJson =>
+              val userInfo: UserInfo = UserInfo(
+                useJson.getLong("ID"),
+                "",
+                "",
+                "",
+                "",
+                0,
+                useJson.getInteger("USER_AGE_GROUP"),
+                useJson.getString("USER_GENDER")
+              )
+              (userInfo.id, userInfo)
+
+            }.toMap
+
+            val userMapBC: Broadcast[Map[Long, UserInfo]] =
+              ssc.sparkContext.broadcast(userMap)
+            val orderInfoRDD: RDD[OrderInfo] = rdd.map { orderInfo =>
+              val userMap: Map[Long, UserInfo] = userMapBC.value
+              val user: UserInfo = userMap.getOrElse(orderInfo.user_id, null)
+              if (user != null) {
+                orderInfo.user_gender = user.user_gender
+                orderInfo.user_age_group = user.user_age_group
+              }
+              orderInfo
+            }
+
+            orderInfoRDD
+          }
+        }
+      }
 
     // 保存数据到es和kafka
+    import org.apache.phoenix.spark._
+    orderInfoWithProvinceWithUserDS.foreachRDD { orderRdd =>
+      orderRdd.foreachPartition { orderIter =>
+        val ordersList: List[OrderInfo] = orderIter.toList
+
+        val orderInfoWithIdList: List[(String, OrderInfo)] =
+          ordersList.map(orderinfo => (orderinfo.id.toString, orderinfo))
+
+        val dateString: String =
+          new SimpleDateFormat(MyDateUtils.patternYMD).format(new Date())
+
+        // 保存到es
+        MyEsUtil.bulkDoc(
+          orderInfoWithIdList,
+          "gmall0105_order_info_" + dateString
+        )
+        for (order <- ordersList) {
+          val orderStr: String =
+            JSON.toJSONString(order, new SerializeConfig(true))
+            // 发送到kafka
+          MyKafkaSink.send("DWD_ORDER_INFO", order.id.toString, orderStr)
+        }
+
+      }
+
+      // 保存到hbase
+      orderRdd.saveToPhoenix(
+        s"${MyConstant.HBASE_TABLE_PRE}_order_info",
+        Seq(
+          "ID",
+          "PROVINCE_ID",
+          "ORDER_STATUS",
+          "USER_ID",
+          "FINAL_TOTAL_AMOUNT",
+          "BENEFIT_REDUCE_AMOUNT",
+          "ORIGINAL_TOTAL_AMOUNT",
+          "FEIGHT_FEE",
+          "EXPIRE_TIME",
+          "CREATE_TIME",
+          "OPERATE_TIME",
+          "CREATE_DATE",
+          "CREATE_HOUR",
+          "IF_FIRST_ORDER",
+          "PROVINCE_NAME",
+          "PROVINCE_AREA_CODE",
+          "PROVINCE_ISO_CODE",
+          "USER_AGE_GROUP",
+          "USER_GENDER"
+        ),
+        new Configuration,
+        Some(MyConstant.ZK_URL)
+      )
+      // 保存偏移量
+      OffsetManager.saveOffset(topicName, groupId, offsetRanges)
+
+    }
 
     ssc.start()
     ssc.awaitTermination()

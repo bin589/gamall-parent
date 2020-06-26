@@ -21,5 +21,5 @@ case class OrderInfo(id: Long,
                      var province_name: String,
                      var province_area_code: String,
                      var province_iso_code: String,
-                     var user_age_group: String,
+                     var user_age_group: Int,
                      var user_gender: String)

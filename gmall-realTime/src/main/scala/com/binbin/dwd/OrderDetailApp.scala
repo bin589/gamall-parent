@@ -43,7 +43,7 @@ object OrderDetailApp {
         JSON.parseObject(objStr, classOf[OrderDetail])
       orderDetail
     }
-
+    // 合并维表数据
     val orderDetailWithSkuDS: DStream[OrderDetail] = orderDetailDS.transform {
       rdd =>
 //        rdd.cache()
@@ -107,14 +107,6 @@ object OrderDetailApp {
       )
       OffsetManager.saveOffset(topicName, groupId, offsetRanges)
     }
-    // 合并维表数据
-    // 品牌 分类 spu  作业
-//    var spu_id: Long,
-//    var tm_id: Long,
-//    var category3_id: Long,
-//    var spu_name: String,
-//    var tm_name: String,
-//    var category3_name: String
 
     ssc.start()
     ssc.awaitTermination()
