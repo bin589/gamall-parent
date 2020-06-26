@@ -4,6 +4,7 @@ import java.lang
 
 import com.alibaba.fastjson.JSON
 import com.binbin.bean.{OrderDetail, OrderInfo}
+import com.binbin.dwd.OrderDetailWide
 import com.binbin.util.{MySparkUtils, RedisUtil}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.SparkConf
@@ -41,7 +42,6 @@ object OrderDetailWideApp {
 
     val orderInfoDS: DStream[OrderInfo] = orderInfoStrDS.map { record =>
       val jsonStr: String = record.value()
-      println(s"OrderInfo==>${jsonStr}")
       val orderInfo: OrderInfo =
         JSON.parseObject(jsonStr, classOf[OrderInfo])
       orderInfo
@@ -59,7 +59,6 @@ object OrderDetailWideApp {
 
     val orderDetailDS: DStream[OrderDetail] = orderDetailStrDS.map { record =>
       val jsonStr: String = record.value()
-      println(s"OrderDetail==>${jsonStr}")
       val orderDetail: OrderDetail =
         JSON.parseObject(jsonStr, classOf[OrderDetail])
       orderDetail
@@ -99,7 +98,95 @@ object OrderDetailWideApp {
         jedisClient.close()
         orderJoinNewList.toIterator
       }
-    orderJoinNewDS.print(1000)
+
+    val orderDetailWideDS: DStream[OrderDetailWide] = orderJoinNewDS.map {
+      case (orderId, (orderInfo, orderDetail)) =>
+        val detailWide = new OrderDetailWide(orderInfo, orderDetail)
+        detailWide
+    }
+//    sku_price * sku_num/final_total_amount(实付) * original_total_amount(原始金额)
+
+    val orderDetailWideWithFinalDetailAmountDS: DStream[OrderDetailWide] =
+      orderDetailWideDS.mapPartitions { orderDetailWideItr =>
+        val orderDetailWideList: List[OrderDetailWide] =
+          orderDetailWideItr.toList
+        val jedisClient: Jedis = RedisUtil.getJedisClient
+
+        val originalTotalAmountField = "originalTotalAmount"
+        val finalDetailAmountTotalField = "finalDetailAmountTotal"
+
+        for (orderDetailWide <- orderDetailWideList) {
+
+          val orderId: Long = orderDetailWide.order_id
+          val skuNum: Long = orderDetailWide.sku_num
+          val skuPrice: Double = orderDetailWide.sku_price
+          val finalTotalAmount: Double = orderDetailWide.final_total_amount
+          val originalTotalAmount: Double =
+            orderDetailWide.original_total_amount
+          val skuAmount: Double = skuNum * skuPrice
+
+          val finalDetailAmount: Double = 0d
+
+          // 如何判断是最后一笔
+          // 如果 该条明细 （数量*单价）== 原始总金额 -（其他明细 【数量*单价】的合计）
+
+          val key = "order_split_amount:" + orderId
+
+          // 金额累计
+          var originalTotalAmountFieldByRedis: Double = 0D
+          val originalTotalAmountFieldByRedisStr: String =
+            jedisClient.hget(key, originalTotalAmountField)
+
+          if (originalTotalAmountFieldByRedisStr != null && originalTotalAmountFieldByRedisStr.length > 0) {
+            originalTotalAmountFieldByRedis =
+              originalTotalAmountFieldByRedisStr.toDouble
+          }
+
+          // 分摊金额累计
+          val finalDetailAmountTotalByRedisStr: String =
+            jedisClient.hget(key, finalDetailAmountTotalField)
+
+          var finalDetailAmountTotalByRedis: Double = 0l
+          if (finalDetailAmountTotalByRedisStr != null && finalDetailAmountTotalByRedisStr.length > 0) {
+            finalDetailAmountTotalByRedis =
+              finalDetailAmountTotalByRedisStr.toDouble
+          }
+
+          // 判断是不是最后一笔
+          if (originalTotalAmountFieldByRedis + skuAmount == originalTotalAmountField) {
+            // 最后一单
+
+            val finalDetailAmount = finalTotalAmount - finalDetailAmountTotalByRedis
+
+          } else {
+
+            val finalDetailAmount
+              : Double = skuAmount / finalTotalAmount * originalTotalAmount
+              .formatted("%.2f")
+              .toDouble
+
+            // 分摊金额累计
+            jedisClient.hset(
+              key,
+              finalDetailAmountTotalField,
+              (finalDetailAmount + finalDetailAmountTotalByRedis).toString
+            )
+
+            // 原价累计
+            jedisClient.hset(
+              key,
+              originalTotalAmountField,
+              (skuAmount + originalTotalAmountFieldByRedis).toString
+            )
+
+            jedisClient.expire(key, 60 * 60)
+          }
+          orderDetailWide.final_detail_amount = finalDetailAmount
+
+        }
+
+        orderDetailWideList.iterator
+      }
 
     ssc.start()
     ssc.awaitTermination()
