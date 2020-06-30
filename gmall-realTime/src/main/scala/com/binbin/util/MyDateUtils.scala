@@ -10,6 +10,7 @@ import java.util.Date
 object MyDateUtils {
 
   val patternYMD = "yyyy-MM-dd"
+  val patternYMDHMS = "yyyy-MM-dd HH:mm:ss"
 
   def getAge(startDateStr: String) = {
     val now: Date = new Date()
@@ -30,5 +31,14 @@ object MyDateUtils {
     val endDate = new SimpleDateFormat(patternYMD).parse(endDateStr)
     val between = endDate.getTime - startDate.getTime
     between
+  }
+
+  /**
+    * 获取当时时间
+    */
+  def getNowYMDHMS(): String = {
+    val simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val nowStr: String = simpleDateFormat.format(new Date())
+    nowStr
   }
 }

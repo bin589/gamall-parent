@@ -12,12 +12,17 @@ object MyKafkaSink {
   def createKafkaProducer: KafkaProducer[String, String] = {
     val properties = new Properties
     properties.put("bootstrap.servers", broker_list)
-    properties.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-    properties.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-    properties.put("enable.idompotence",(true: java.lang.Boolean))
+    properties.put(
+      "key.serializer",
+      "org.apache.kafka.common.serialization.StringSerializer"
+    )
+    properties.put(
+      "value.serializer",
+      "org.apache.kafka.common.serialization.StringSerializer"
+    )
+    properties.put("enable.idompotence", (true: java.lang.Boolean))
     var producer: KafkaProducer[String, String] = null
-    try
-      producer = new KafkaProducer[String, String](properties)
+    try producer = new KafkaProducer[String, String](properties)
     catch {
       case e: Exception =>
         e.printStackTrace()
@@ -31,10 +36,9 @@ object MyKafkaSink {
 
   }
 
-  def send(topic: String,key:String, msg: String): Unit = {
+  def send(topic: String, key: String, msg: String): Unit = {
     if (kafkaProducer == null) kafkaProducer = createKafkaProducer
-    kafkaProducer.send(new ProducerRecord[String, String](topic,key, msg))
+    kafkaProducer.send(new ProducerRecord[String, String](topic, key, msg))
 
   }
 }
-

@@ -1,6 +1,4 @@
-package com.binbin.dwd
-
-import com.binbin.bean.{OrderDetail, OrderInfo}
+package com.binbin.bean
 
 case class OrderDetailWide(var order_detail_id: Long = 0L,
                            var order_id: Long = 0L,
@@ -20,7 +18,7 @@ case class OrderDetailWide(var order_detail_id: Long = 0L,
                            var if_first_order: String = null,
                            var province_name: String = null,
                            var province_area_code: String = null,
-                           var user_age_group: Int = null,
+                           var user_age_group: String = null,
                            var user_gender: String = null,
                            var dt: String = null,
                            var spu_id: Long = 0L,

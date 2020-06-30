@@ -20,7 +20,7 @@ object OffsetManager {
     import scala.collection.JavaConversions._
     val kafkaOfferSetMap: Map[TopicPartition, Long] = offerSetMap.map {
       case (partitionId, offerSet) =>
-        println(s"partitionId=>${partitionId}==>offerSet==>${offerSet.toLong}")
+        println(s"获取偏移量：partitionId=>${partitionId}==>offerSet==>${offerSet.toLong}")
         (new TopicPartition(topicName, partitionId.toInt), offerSet.toLong)
     }.toMap
 

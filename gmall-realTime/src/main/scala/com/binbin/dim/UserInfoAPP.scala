@@ -16,6 +16,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
   * @create 2020-06-26 10:23 上午
   */
 object UserInfoAPP {
+
   def main(args: Array[String]): Unit = {
 
     val sparkConf: SparkConf =
@@ -41,17 +42,15 @@ object UserInfoAPP {
         // 计算 年龄级别
         val birthday: String = userJSON.getString("birthday")
         val age: Int = MyDateUtils.getAge(birthday)
-        val ageGroup: Int = getAgeGroup(age)
+        val ageGroup: String = getAgeGroup(age)
+        val gender: String = getGender(userJSON.getString("gender"))
 
         val userInfo: UserInfo = UserInfo(
           userJSON.getLong("id"),
-          userJSON.getString("name"),
-          userJSON.getString("phone_num"),
-          userJSON.getString("email"),
           userJSON.getString("user_level"),
           age,
           ageGroup,
-          userJSON.getString("gender")
+          gender
         )
         userInfo
       }
@@ -63,9 +62,6 @@ object UserInfoAPP {
         s"${MyConstant.HBASE_TABLE_PRE}_user_info",
         Seq(
           "ID",
-          "NAME",
-          "PHONE_NUM",
-          "EMAIL",
           "USER_LEVEL",
           "USER_AGE",
           "USER_AGE_GROUP",
@@ -80,8 +76,29 @@ object UserInfoAPP {
     ssc.start()
     ssc.awaitTermination()
   }
-  def getAgeGroup(age: Int): Int = {
-    val ageGroup: Int = (age / 10)
-    ageGroup
+
+  def getGender(gender: String): String = {
+
+    if (gender == null || gender.size == 0) {
+      "保密"
+    } else if (gender == "F") {
+      "女"
+    } else if (gender == "M") {
+      "男"
+    } else {
+      "保密"
+    }
+
+  }
+
+  def getAgeGroup(age: Int): String = {
+
+    if (age < 20) {
+      "20岁以下"
+    } else if (age >= 20 && age < 30) {
+      "20岁到30岁"
+    } else {
+      "30岁以上"
+    }
   }
 }

@@ -20,6 +20,7 @@ object MySparkUtils {
     // 获取偏移量
     val offsetMap: Map[TopicPartition, Long] =
       OffsetManager.getOffset(topicName, groupId)
+
     var kafkaDStream: InputDStream[ConsumerRecord[String, String]] = null;
     if (offsetMap.isEmpty) {
       kafkaDStream = MyKafkaUtil.getKafkaStream(topicName, ssc, groupId)

@@ -197,11 +197,8 @@ object OrderInfoApp {
               val userInfo: UserInfo = UserInfo(
                 useJson.getLong("ID"),
                 "",
-                "",
-                "",
-                "",
                 0,
-                useJson.getInteger("USER_AGE_GROUP"),
+                useJson.getString("USER_AGE_GROUP"),
                 useJson.getString("USER_GENDER")
               )
               (userInfo.id, userInfo)
@@ -214,8 +211,13 @@ object OrderInfoApp {
               val userMap: Map[Long, UserInfo] = userMapBC.value
               val user: UserInfo = userMap.getOrElse(orderInfo.user_id, null)
               if (user != null) {
-                orderInfo.user_gender = user.user_gender
-                orderInfo.user_age_group = user.user_age_group
+                val user_gender: String = user.user_gender
+                val user_age_group: String = user.user_age_group
+                println(
+                  s"user_id=${user.id}==>user_gender===${user_gender}==>user_age_group===${user_age_group}"
+                )
+                orderInfo.user_gender = user_gender
+                orderInfo.user_age_group = user_age_group
               }
               orderInfo
             }
@@ -254,32 +256,32 @@ object OrderInfoApp {
 
       // 保存到hbase
 //       TODO 测试先注释
-//      orderRdd.saveToPhoenix(
-//        s"${MyConstant.HBASE_TABLE_PRE}_order_info",
-//        Seq(
-//          "ID",
-//          "PROVINCE_ID",
-//          "ORDER_STATUS",
-//          "USER_ID",
-//          "FINAL_TOTAL_AMOUNT",
-//          "BENEFIT_REDUCE_AMOUNT",
-//          "ORIGINAL_TOTAL_AMOUNT",
-//          "FEIGHT_FEE",
-//          "EXPIRE_TIME",
-//          "CREATE_TIME",
-//          "OPERATE_TIME",
-//          "CREATE_DATE",
-//          "CREATE_HOUR",
-//          "IF_FIRST_ORDER",
-//          "PROVINCE_NAME",
-//          "PROVINCE_AREA_CODE",
-//          "PROVINCE_ISO_CODE",
-//          "USER_AGE_GROUP",
-//          "USER_GENDER"
-//        ),
-//        new Configuration,
-//        Some(MyConstant.ZK_URL)
-//      )
+      orderRdd.saveToPhoenix(
+        s"${MyConstant.HBASE_TABLE_PRE}_order_info",
+        Seq(
+          "ID",
+          "PROVINCE_ID",
+          "ORDER_STATUS",
+          "USER_ID",
+          "FINAL_TOTAL_AMOUNT",
+          "BENEFIT_REDUCE_AMOUNT",
+          "ORIGINAL_TOTAL_AMOUNT",
+          "FEIGHT_FEE",
+          "EXPIRE_TIME",
+          "CREATE_TIME",
+          "OPERATE_TIME",
+          "CREATE_DATE",
+          "CREATE_HOUR",
+          "IF_FIRST_ORDER",
+          "PROVINCE_NAME",
+          "PROVINCE_AREA_CODE",
+          "PROVINCE_ISO_CODE",
+          "USER_AGE_GROUP",
+          "USER_GENDER"
+        ),
+        new Configuration,
+        Some(MyConstant.ZK_URL)
+      )
       // 保存偏移量
       OffsetManager.saveOffset(topicName, groupId, offsetRanges)
 

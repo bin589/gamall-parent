@@ -3,9 +3,9 @@ package com.binbin.dws
 import java.lang
 
 import com.alibaba.fastjson.JSON
-import com.binbin.bean.{OrderDetail, OrderInfo}
-import com.binbin.dwd.OrderDetailWide
-import com.binbin.util.{MySparkUtils, RedisUtil}
+import com.alibaba.fastjson.serializer.SerializeConfig
+import com.binbin.bean.{OrderDetail, OrderDetailWide, OrderInfo}
+import com.binbin.util.{MyKafkaSink, MySparkUtils, RedisUtil}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
@@ -42,6 +42,7 @@ object OrderDetailWideApp {
 
     val orderInfoDS: DStream[OrderInfo] = orderInfoStrDS.map { record =>
       val jsonStr: String = record.value()
+      println(s"OrderInfo=>${jsonStr}")
       val orderInfo: OrderInfo =
         JSON.parseObject(jsonStr, classOf[OrderInfo])
       orderInfo
@@ -59,6 +60,7 @@ object OrderDetailWideApp {
 
     val orderDetailDS: DStream[OrderDetail] = orderDetailStrDS.map { record =>
       val jsonStr: String = record.value()
+      println(s"OrderDetail=>${jsonStr}")
       val orderDetail: OrderDetail =
         JSON.parseObject(jsonStr, classOf[OrderDetail])
       orderDetail
@@ -125,7 +127,7 @@ object OrderDetailWideApp {
             orderDetailWide.original_total_amount
           val skuAmount: Double = skuNum * skuPrice
 
-          val finalDetailAmount: Double = 0d
+          var finalDetailAmount: Double = 0d
 
           // 如何判断是最后一笔
           // 如果 该条明细 （数量*单价）== 原始总金额 -（其他明细 【数量*单价】的合计）
@@ -156,14 +158,13 @@ object OrderDetailWideApp {
           if (originalTotalAmountFieldByRedis + skuAmount == originalTotalAmountField) {
             // 最后一单
 
-            val finalDetailAmount = finalTotalAmount - finalDetailAmountTotalByRedis
+            finalDetailAmount = finalTotalAmount - finalDetailAmountTotalByRedis
 
           } else {
-
-            val finalDetailAmount
-              : Double = skuAmount / finalTotalAmount * originalTotalAmount
-              .formatted("%.2f")
-              .toDouble
+//            orderWide.final_detail_amount= Math.round(orderWide.final_detail_amount*100D)/100D
+            finalDetailAmount = skuAmount / finalTotalAmount * originalTotalAmount
+            finalDetailAmount = Math.round(finalDetailAmount * 100D) / 100D
+            println("钱==》" + finalDetailAmount)
 
             // 分摊金额累计
             jedisClient.hset(
@@ -180,13 +181,61 @@ object OrderDetailWideApp {
             )
 
             jedisClient.expire(key, 60 * 60)
+
           }
+
           orderDetailWide.final_detail_amount = finalDetailAmount
 
         }
+        jedisClient.close()
 
         orderDetailWideList.iterator
       }
+    orderDetailWideWithFinalDetailAmountDS.cache()
+
+    val sendKafkaDS: DStream[OrderDetailWide] =
+      orderDetailWideWithFinalDetailAmountDS
+        .mapPartitions { orderWideItr =>
+          val orderWideList: List[OrderDetailWide] = orderWideItr.toList
+          orderWideList.foreach { orderWide =>
+            val orderStr: String =
+              JSON.toJSONString(orderWide, new SerializeConfig(true))
+            println(s"发送${orderStr}")
+            MyKafkaSink.send("DWD_ORDER_WIDE", orderStr)
+          }
+          orderWideList.toIterator
+        }
+
+    // 209行调用.print()是为了触发aciton 如果打开下面的程序将就不需要了
+    sendKafkaDS.print()
+
+
+
+    // 写入到clickHouse
+    //    val sparkSession: SparkSession =
+    //      SparkSession.builder().appName("OrderDetailWideApp").getOrCreate()
+    //    sendKafkaDS.foreachRDD { rdd =>
+    //      val df: DataFrame = rdd.toDF()
+    //      df.write
+    //        .mode(SaveMode.Append)
+    //        .option("batchsize", "100")
+    //        .option("isolationLevel", "NONE") // 设置事务
+    //        .option("numPartitions", "4") // 设置并发
+    //        .option("driver", "ru.yandex.clickhouse.ClickHouseDriver")
+    //        .jdbc(
+    //          "jdbc:clickhouse://hadoop102:8123/test",
+    //          "order_wide",
+    //          new Properties()
+    //        )
+    //
+    //      OffsetManager.saveOffset(orderInfoTopic, orderInfoGroup, orderInfoRanges)
+    //      OffsetManager.saveOffset(
+    //        orderDetailTopic,
+    //        orderDetailGroup,
+    //        orderDetailRanges
+    //      )
+    //
+    //    }
 
     ssc.start()
     ssc.awaitTermination()

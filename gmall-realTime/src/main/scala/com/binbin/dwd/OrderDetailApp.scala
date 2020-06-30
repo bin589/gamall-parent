@@ -4,6 +4,7 @@ import com.alibaba.fastjson.serializer.SerializeConfig
 import com.alibaba.fastjson.{JSON, JSONObject}
 import com.binbin.bean.{OrderDetail, SkuInfo}
 import com.binbin.util._
+import org.apache.hadoop.conf.Configuration
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.SparkConf
 import org.apache.spark.broadcast.Broadcast
@@ -11,6 +12,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.kafka010.{HasOffsetRanges, OffsetRange}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.phoenix.spark._
 
 /**
   * @author libin
@@ -21,7 +23,7 @@ object OrderDetailApp {
   def main(args: Array[String]): Unit = {
     val sparkConf: SparkConf =
       new SparkConf().setAppName("OrderDetailApp").setMaster("local[4]")
-    val ssc = new StreamingContext(sparkConf, Seconds(2))
+    val ssc = new StreamingContext(sparkConf, Seconds(3))
 
     // 获取偏移量
     val topicName = "ODS_ORDER_DETAIL"
@@ -46,7 +48,7 @@ object OrderDetailApp {
     // 合并维表数据
     val orderDetailWithSkuDS: DStream[OrderDetail] = orderDetailDS.transform {
       rdd =>
-        val skuIdList: Array[Long] = rdd.map(_.sku_id).collect()
+        val skuIdList: Set[Long] = rdd.map(_.sku_id).collect().toSet
         if (skuIdList.isEmpty) {
           rdd
         } else {
@@ -69,6 +71,7 @@ object OrderDetailApp {
             val skuInfo: SkuInfo =
               skuMap.getOrElse(orderDetail.sku_id.toString, null)
             if (skuInfo != null) {
+//              orderDetail.spu_id=skuInfo.spu_id.toLong
               orderDetail.spu_name = skuInfo.spu_name
               orderDetail.tm_id = skuInfo.tm_id.toLong
               orderDetail.tm_name = skuInfo.tm_name
@@ -99,26 +102,26 @@ object OrderDetailApp {
 
       //  保存到hbase
       //  TODO 测试先注释
-//      orderDetailRDD.saveToPhoenix(
-//        s"${MyConstant.HBASE_TABLE_PRE}_order_detail",
-//        Seq(
-//          "ID",
-//          "ORDER_ID",
-//          "SKU_ID",
-//          "ORDER_PRICE",
-//          "SKU_NUM",
-//          "SKU_NAME",
-//          "CREATE_TIME",
-//          "SPU_ID",
-//          "SPU_NAME",
-//          "TM_ID",
-//          "TM_NAME",
-//          "CATEGORY3_ID",
-//          "CATEGORY3_NAME"
-//        ),
-//        new Configuration,
-//        Some(MyConstant.ZK_URL)
-//      )
+      orderDetailRDD.saveToPhoenix(
+        s"${MyConstant.HBASE_TABLE_PRE}_order_detail",
+        Seq(
+          "ID",
+          "ORDER_ID",
+          "SKU_ID",
+          "ORDER_PRICE",
+          "SKU_NUM",
+          "SKU_NAME",
+          "CREATE_TIME",
+          "SPU_ID",
+          "SPU_NAME",
+          "TM_ID",
+          "TM_NAME",
+          "CATEGORY3_ID",
+          "CATEGORY3_NAME"
+        ),
+        new Configuration,
+        Some(MyConstant.ZK_URL)
+      )
       OffsetManager.saveOffset(topicName, groupId, offsetRanges)
     }
 

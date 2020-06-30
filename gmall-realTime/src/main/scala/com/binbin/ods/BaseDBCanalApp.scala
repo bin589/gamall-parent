@@ -1,6 +1,6 @@
 package com.binbin.ods
 
-import com.alibaba.fastjson.JSON
+import com.alibaba.fastjson.{JSON, JSONArray}
 import com.binbin.util.{MyKafkaSink, MyKafkaUtil, OffsetManager}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
@@ -51,13 +51,15 @@ object BaseDBCanalApp {
     // 推回kafka
     jsonObjStream.foreachRDD { rdd =>
       rdd.foreach { jsonObj =>
-        val dataArray = jsonObj.getJSONArray("data")
+        val dataArray: JSONArray = jsonObj.getJSONArray("data")
         val tableName: String = jsonObj.getString("table")
         val topic: String = "ODS_" + tableName.toUpperCase
-        dataArray.forEach { dataJson =>
-          val data = dataJson.toString
-          MyKafkaSink.send(topic, data)
-        }
+
+//        for (dataJson <- dataArray) {
+//          val msg: String = jsonObj.toString
+//          MyKafkaSink.send(topic, msg)
+//        }
+
       }
     }
 

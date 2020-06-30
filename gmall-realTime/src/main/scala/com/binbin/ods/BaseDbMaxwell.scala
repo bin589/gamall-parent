@@ -18,7 +18,7 @@ object BaseDbMaxwell {
   def main(args: Array[String]): Unit = {
     val sparkConf =
       new SparkConf().setAppName("base_db_maxwell").setMaster("local[4]")
-    val ssc: StreamingContext = new StreamingContext(sparkConf, Seconds(2))
+    val ssc: StreamingContext = new StreamingContext(sparkConf, Seconds(3))
 
     val topicName = "ODS_DB_GMALL2020_M"
     val groupId = "base_db_maxwel_group"
@@ -56,6 +56,7 @@ object BaseDbMaxwell {
 
           val jsonString = jsonObj.getString("data")
           val tableName: String = jsonObj.getString("table")
+//          if (tableName == "user_info") {
           if (tableName == "order_info" || tableName == "order_detail") {
             val topic = "ODS_" + tableName.toUpperCase
             println(s"topic=>${topic}==>${jsonString}")
