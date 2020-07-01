@@ -6,13 +6,13 @@ import com.binbin.bean.{OrderDetail, SkuInfo}
 import com.binbin.util._
 import org.apache.hadoop.conf.Configuration
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.phoenix.spark._
 import org.apache.spark.SparkConf
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.kafka010.{HasOffsetRanges, OffsetRange}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.phoenix.spark._
 
 /**
   * @author libin
@@ -53,7 +53,7 @@ object OrderDetailApp {
           rdd
         } else {
           val sql =
-            s"select ID,SPU_NAME,CATEGORY3_ID,CATEGORY3_NAME,TM_ID,TM_NAME " +
+            s"select ID,SPU_ID,SPU_NAME,CATEGORY3_ID,CATEGORY3_NAME,TM_ID,TM_NAME " +
               s"from ${MyConstant.HBASE_TABLE_PRE}_sku_info " +
               s"where id  in ('${skuIdList.mkString("','")}')"
 
@@ -71,7 +71,7 @@ object OrderDetailApp {
             val skuInfo: SkuInfo =
               skuMap.getOrElse(orderDetail.sku_id.toString, null)
             if (skuInfo != null) {
-//              orderDetail.spu_id=skuInfo.spu_id.toLong
+              orderDetail.spu_id = skuInfo.spu_id.toLong
               orderDetail.spu_name = skuInfo.spu_name
               orderDetail.tm_id = skuInfo.tm_id.toLong
               orderDetail.tm_name = skuInfo.tm_name

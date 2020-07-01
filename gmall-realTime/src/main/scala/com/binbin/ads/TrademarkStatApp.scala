@@ -22,7 +22,7 @@ object TrademarkStatApp {
     val sparkConf: SparkConf =
       new SparkConf().setAppName("TrademarkStatApp").setMaster("local[4]")
     val ssc = new StreamingContext(sparkConf, Seconds(3))
-    val topicName = "DWD_ORDER_WIDE"
+    val topicName = "DWD_ORDER_WIDE_TM"
     val groupId = "TrademarkStatApp"
     val kafkaOffsetMap: Map[TopicPartition, Long] =
       OffsetManagerMySql.getOffset(topicName, groupId)

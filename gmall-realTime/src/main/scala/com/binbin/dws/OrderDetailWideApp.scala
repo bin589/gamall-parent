@@ -5,7 +5,7 @@ import java.lang
 import com.alibaba.fastjson.JSON
 import com.alibaba.fastjson.serializer.SerializeConfig
 import com.binbin.bean.{OrderDetail, OrderDetailWide, OrderInfo}
-import com.binbin.util.{MyKafkaSink, MySparkUtils, RedisUtil}
+import com.binbin.util.{MyKafkaSink, MySparkUtils, OffsetManager, RedisUtil}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
@@ -201,15 +201,19 @@ object OrderDetailWideApp {
             val orderStr: String =
               JSON.toJSONString(orderWide, new SerializeConfig(true))
             println(s"发送${orderStr}")
-            MyKafkaSink.send("DWD_ORDER_WIDE", orderStr)
+//            MyKafkaSink.send("DWD_ORDER_WIDE_TM", orderStr)
+            //            MyKafkaSink.send("DWD_ORDER_WIDE_SPU", orderStr)
+//            MyKafkaSink.send("DWD_ORDER_WIDE_CATE", orderStr)
+//            MyKafkaSink.send("DWD_ORDER_WIDE_SEX", orderStr)
+//            MyKafkaSink.send("DWD_ORDER_WIDE_AGE", orderStr)
+            MyKafkaSink.send("DWD_ORDER_WIDE_PROVINCE", orderStr)
           }
           orderWideList.toIterator
         }
 
     // 209行调用.print()是为了触发aciton 如果打开下面的程序将就不需要了
-    sendKafkaDS.print()
-
-
+//    sendKafkaDS.print()
+//    sendKafkaDS.cache()
 
     // 写入到clickHouse
     //    val sparkSession: SparkSession =
@@ -236,6 +240,16 @@ object OrderDetailWideApp {
     //      )
     //
     //    }
+
+    sendKafkaDS.foreachRDD { rdd =>
+      rdd.collect()
+      OffsetManager.saveOffset(orderInfoTopic, orderInfoGroup, orderInfoRanges)
+      OffsetManager.saveOffset(
+        orderDetailTopic,
+        orderDetailGroup,
+        orderDetailRanges
+      )
+    }
 
     ssc.start()
     ssc.awaitTermination()
